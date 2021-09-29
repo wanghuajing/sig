@@ -114,7 +114,7 @@ def read_pickle(file_name: str) -> list:
 def train_one_epoch(model, loss, optimizer, data_loader, device, epoch):
     model.train()
     loss_function = loss
-    mean_loss = torch.zeros(1).to(device)
+    sum_loss = torch.zeros(1).to(device)
     optimizer.zero_grad()
 
     data_loader = tqdm(data_loader)
@@ -126,9 +126,9 @@ def train_one_epoch(model, loss, optimizer, data_loader, device, epoch):
 
         loss = loss_function(pred, labels.to(device))
         loss.backward()
-        mean_loss = (mean_loss * step + loss.detach()) / (step + 1)  # update mean losses
+        sum_loss = sum_loss + loss.detach()  # update mean losses
 
-        data_loader.desc = "[epoch {}] mean loss {}".format(epoch, round(mean_loss.item(), 3))
+        data_loader.desc = "[epoch {}]".format(epoch+1)
 
         if not torch.isfinite(loss):
             print('WARNING: non-finite loss, ending training ', loss)
@@ -137,14 +137,14 @@ def train_one_epoch(model, loss, optimizer, data_loader, device, epoch):
         optimizer.step()
         optimizer.zero_grad()
 
-    return mean_loss.item()
+    return sum_loss.item()
 
 
 @torch.no_grad()
 def evaluate(model, loss, data_loader, device):
     model.eval()
     loss_function = loss
-    sum_loss = 0
+    sum_loss = torch.zeros(1).to(device)
     data_loader = tqdm(data_loader)
     cmt = torch.zeros(2, 2, dtype=torch.int64)
     acc = 0
@@ -155,7 +155,7 @@ def evaluate(model, loss, data_loader, device):
         labels = torch.zeros(labels.shape[0], 2).scatter_(1, labels, 1)
         pred = model(images.to(device))
         loss = loss_function(pred, labels.to(device))
-        sum_loss += loss.item()
+        sum_loss = sum_loss + loss.detach()
         predict = torch.softmax(pred, dim=1)
         predict_cla = torch.argmax(predict, dim=1).cpu()
         for i in range(len(predict_cla)):
@@ -163,4 +163,4 @@ def evaluate(model, loss, data_loader, device):
         acc = (cmt[0][0] + cmt[1][1]) / cmt.sum()
         precision = cmt[1][1] / (cmt[1][0] + cmt[1][1])
         recall = cmt[1][1] / (cmt[1][1] + cmt[0][1])
-    return sum_loss, acc, precision, recall
+    return sum_loss.item(), acc, precision, recall

@@ -19,7 +19,7 @@ def main(args):
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
 
     print(args)
-    print('Start Tensorboard with "tensorboard --logdir=runs", view at http://localhost:6006/')
+    print('Start Tensorboard with "tensorboard --logdir=./runs", view at http://localhost:6006/')
     tb_writer = SummaryWriter()
     if os.path.exists("./weights") is False:
         os.makedirs("./weights")
@@ -32,8 +32,8 @@ def main(args):
                                    transforms.ToTensor(),
                                    ])}
     dir = args.data_path
-    train_df = pd.read_csv(dir + 'GE_train.csv')
-    val_df = pd.read_csv(dir + 'GE_val.csv')
+    train_df = pd.read_csv(dir + '{}_train.csv'.format(args.type))
+    val_df = pd.read_csv(dir + '{}_val.csv'.format(args.type))
     # 实例化训练数据集
     train_data_set = GE_dataset(pathImageDirectory=dir,
                                 df=train_df,
@@ -78,24 +78,24 @@ def main(args):
     loss_function = torch.nn.BCEWithLogitsLoss()
     for epoch in range(args.epochs):
         # train
-        mean_loss = train_one_epoch(model=model,
-                                    loss=loss_function,
-                                    optimizer=optimizer,
-                                    data_loader=train_loader,
-                                    device=device,
-                                    epoch=epoch)
+        sum_loss = train_one_epoch(model=model,
+                                   loss=loss_function,
+                                   optimizer=optimizer,
+                                   data_loader=train_loader,
+                                   device=device,
+                                   epoch=epoch)
 
         scheduler.step()
-
+        train_loss = sum_loss / len(train_loader)
         # validate
         sum_loss, acc, precision, recall = evaluate(model=model,
                                                     loss=loss_function,
                                                     data_loader=val_loader,
                                                     device=device)
-        val_loss = sum_loss / len(val_data_set)
-        print("[epoch {}] accuracy: {}".format(epoch, acc))
+        val_loss = sum_loss / len(train_loader)
+        print("[epoch {}] ACC: {} P: {} R: {}".format(epoch + 1, round(acc, 2),round(precision, 2),round(recall, 2)))
         tags = ["loss/train", "loss/val", "metric/Acc", "metric/Precision", "metric/Recall", "learning_rate"]
-        tb_writer.add_scalar(tags[0], mean_loss, epoch)
+        tb_writer.add_scalar(tags[0], train_loss, epoch)
         tb_writer.add_scalar(tags[1], val_loss, epoch)
         tb_writer.add_scalar(tags[2], acc, epoch)
         tb_writer.add_scalar(tags[3], precision, epoch)
@@ -108,6 +108,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--num_classes', type=int, default=2)
+    parser.add_argument('--type', type=str, default='GE')
     parser.add_argument('--epochs', type=int, default=50)
     parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--lr', type=float, default=0.001)

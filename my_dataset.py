@@ -111,11 +111,11 @@ class GE_dataset(Dataset):
         # imageData = imageData / (2 ** 12 - 1)
         # imageData = Image.fromarray(imageData)
         image = image.resize((1280, 1280))
-        image = np.asarray(image).astype(np.int16)
+        image = np.asarray(image)
         image = np.dstack((image, image, image))
         image = image.transpose([2, 0, 1])
-        image = (image / 4095).astype(np.float32)
-        image = torch.tensor(image)
+        image = (image / 4095)
+        image = torch.tensor(image, dtype=torch.float32)
         # if self.transform is not None: imageData = self.transform(imageData)  # cp val test不使用
 
         return image, imageLabel
