@@ -60,7 +60,8 @@ def main(args):
                                              num_workers=nw)
 
     # 如果存在预训练权重则载入
-    model = res50(3, 2)
+    model = Sigmoid(3, 1, 16)
+    # model = res50(3, 2)
     model.to(device)
 
     # 是否冻结权重
@@ -93,7 +94,7 @@ def main(args):
                                                     data_loader=val_loader,
                                                     device=device)
         val_loss = sum_loss / len(train_loader)
-        print("[epoch {}] ACC: {} P: {} R: {}".format(epoch + 1, round(acc, 2),round(precision, 2),round(recall, 2)))
+        print("[epoch {}] ACC: {} P: {} R: {}".format(epoch + 1, round(acc, 2), round(precision, 2), round(recall, 2)))
         tags = ["loss/train", "loss/val", "metric/Acc", "metric/Precision", "metric/Recall", "learning_rate"]
         tb_writer.add_scalar(tags[0], train_loss, epoch)
         tb_writer.add_scalar(tags[1], val_loss, epoch)

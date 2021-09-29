@@ -123,7 +123,6 @@ def train_one_epoch(model, loss, optimizer, data_loader, device, epoch):
         images, labels = data
         labels = torch.zeros(labels.shape[0], 2).scatter_(1, labels, 1)
         pred = model(images.to(device))
-
         loss = loss_function(pred, labels.to(device))
         loss.backward()
         sum_loss = sum_loss + loss.detach()  # update mean losses
@@ -163,4 +162,4 @@ def evaluate(model, loss, data_loader, device):
         acc = (cmt[0][0] + cmt[1][1]) / cmt.sum()
         precision = cmt[1][1] / (cmt[1][0] + cmt[1][1])
         recall = cmt[1][1] / (cmt[1][1] + cmt[0][1])
-    return sum_loss.item(), acc, precision, recall
+    return sum_loss.item(), acc.item(), precision.item(), recall.item()

@@ -11,8 +11,60 @@ def res50(in_channels: int, num_classes: int = 40):
     return model
 
 
+class ResBlock(nn.Module):
+    def __init__(self, channel_size: int, negative_slope: float = 0.2):
+        super().__init__()
+        self.block = nn.Sequential(
+            nn.Conv2d(channel_size, channel_size, kernel_size=(3, 3), padding=(1, 1),
+                      bias=False),
+            nn.BatchNorm2d(channel_size),
+            nn.LeakyReLU(negative_slope, inplace=True),
+            nn.Conv2d(channel_size, channel_size, kernel_size=(3, 3), padding=(1, 1),
+                      bias=False),
+            nn.BatchNorm2d(channel_size)
+        )
+
+    def forward(self, x):
+        return x + self.block(x)
+
+
+class Sigmoid(nn.Module):
+    def __init__(self, in_channels, r, n):
+        super().__init__()
+        self.module1 = nn.Sequential(
+            nn.Conv2d(in_channels, n, kernel_size=(7, 7), padding=(3, 3)),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(n, n, kernel_size=(1, 1)),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.BatchNorm2d(n),
+        )
+
+        resblocks = []
+        for i in range(r):
+            resblocks.append(ResBlock(n, 0.2))
+        self.resblocks = nn.Sequential(*resblocks)
+
+        self.module3 = nn.Sequential(
+            nn.Conv2d(n, n, kernel_size=(3, 3), padding=(1, 1), bias=False),
+            nn.BatchNorm2d(n)
+        )
+        self.module4 = nn.Conv2d(n, 3, kernel_size=(7, 7), padding=(3, 3))
+        self.resnet50 = res50(3, 2)
+
+    def forward(self, x):
+        out = self.module1(x)
+        out_residual = out
+        out = self.resblocks(out)
+        out = self.module3(out)
+        out = out + out_residual
+        out = self.module4(out)
+        out = out + x
+        out = self.resnet50(out)
+        return out
+
+
 # 通过多个sigmoid叠加重新归一化图片
-class sig_module(nn.Module):
+class sig_add(nn.Module):
     def __init__(self):
         super().__init__()
         self.base = res50(1, 20)
@@ -28,15 +80,3 @@ class sig_module(nn.Module):
                 img = img + x1
         out = self.classification(img)
         return out
-
-
-
-
-# if __name__ == '__main__':
-#     net = sig_module()
-#     loss_function = nn.MSELoss()
-#     x = torch.rand(4, 1, 224, 224)
-#     gt = torch.rand(1)
-#     out = net(x)
-#     loss = loss_function(out, gt)
-#     loss.backward()
