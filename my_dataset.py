@@ -105,17 +105,20 @@ class GE_dataset(Dataset):
     def __getitem__(self, index):
         imagePath = self.df.loc[index, 'image_path']
         imageLabel = [self.df.loc[index, 'pathology_label']]
-        imageData = pydicom.dcmread(imagePath).pixel_array
+        # imageData = pydicom.dcmread(imagePath).pixel_array
+        image = Image.open(imagePath)
         imageLabel = torch.LongTensor(imageLabel)
-        imageData = imageData / (2 ** 12 - 1)
-        imageData = Image.fromarray(imageData)
-        imageData = imageData.resize((1280, 1280))
-        imageData = np.asarray(imageData)
-        imageData = np.dstack((imageData, imageData, imageData))
-        imageData = imageData.transpose([2, 0, 1])
+        # imageData = imageData / (2 ** 12 - 1)
+        # imageData = Image.fromarray(imageData)
+        image = image.resize((1280, 1280))
+        image = np.asarray(image).astype(np.int16)
+        image = np.dstack((image, image, image))
+        image = image.transpose([2, 0, 1])
+        image = (image / 4095).astype(np.float32)
+        image = torch.tensor(image)
         # if self.transform is not None: imageData = self.transform(imageData)  # cp val test不使用
 
-        return imageData, imageLabel
+        return image, imageLabel
 
     # --------------------------------------------------------------------------------
 
