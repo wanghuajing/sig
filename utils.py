@@ -121,13 +121,12 @@ def train_one_epoch(model, loss, optimizer, data_loader, device, epoch):
 
     for step, data in enumerate(data_loader):
         images, labels = data
-        labels = torch.zeros(labels.shape[0], 2).scatter_(1, labels, 1)
         pred = model(images.to(device))
         loss = loss_function(pred, labels.to(device))
         loss.backward()
         sum_loss = sum_loss + loss.detach()  # update mean losses
 
-        data_loader.desc = "[epoch {}]".format(epoch+1)
+        data_loader.desc = "[epoch {}]".format(epoch + 1)
 
         if not torch.isfinite(loss):
             print('WARNING: non-finite loss, ending training ', loss)
@@ -151,14 +150,14 @@ def evaluate(model, loss, data_loader, device):
     recall = 0
     for step, data in enumerate(data_loader):
         images, labels = data
-        labels = torch.zeros(labels.shape[0], 2).scatter_(1, labels, 1)
+        # labels = torch.zeros(labels.shape[0], 2).scatter_(1, labels, 1)
         pred = model(images.to(device))
         loss = loss_function(pred, labels.to(device))
         sum_loss = sum_loss + loss.detach()
         predict = torch.softmax(pred, dim=1)
         predict_cla = torch.argmax(predict, dim=1).cpu()
         for i in range(len(predict_cla)):
-            cmt[predict_cla[i], int(labels[i, 1])] += 1
+            cmt[predict_cla[i], labels[i]] += 1
         acc = (cmt[0][0] + cmt[1][1]) / cmt.sum()
         precision = cmt[1][1] / (cmt[1][0] + cmt[1][1])
         recall = cmt[1][1] / (cmt[1][1] + cmt[0][1])

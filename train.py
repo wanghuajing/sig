@@ -65,7 +65,7 @@ def main(args):
 
     # 如果存在预训练权重则载入
     # model = Sigmoid(3, 1, 16)
-    model = res50(3, 2)
+    model = res18(3, 2)
     model.to(device)
 
     # 是否冻结权重
@@ -76,11 +76,12 @@ def main(args):
                 para.requires_grad_(False)
 
     pg = [p for p in model.parameters() if p.requires_grad]
-    optimizer = optim.SGD(pg, lr=args.lr, momentum=0.9, weight_decay=1E-4, nesterov=True)
+    # optimizer = optim.SGD(pg, lr=args.lr, momentum=0.9, weight_decay=1E-4, nesterov=True)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.999), eps=1e-08, weight_decay=1e-5)
     # Scheduler https://arxiv.org/pdf/1812.01187.pdf
     lf = lambda x: ((1 + math.cos(x * math.pi / args.epochs)) / 2) * (1 - args.lrf) + args.lrf  # cosine
     scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)
-    loss_function = torch.nn.BCEWithLogitsLoss()
+    loss_function = torch.nn.CrossEntropyLoss()
     best_acc = 0
     for epoch in range(args.epochs):
         # train
@@ -107,6 +108,7 @@ def main(args):
         tb_writer.add_scalar(tags[3], precision, epoch)
         tb_writer.add_scalar(tags[4], recall, epoch)
         tb_writer.add_scalar(tags[5], optimizer.param_groups[0]["lr"], epoch)
+        print(optimizer.param_groups[0]["lr"])
         if best_acc < acc:
             torch.save(model.state_dict(), args.save_dir + 'best.pth')
             best_acc = acc
