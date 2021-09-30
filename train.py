@@ -20,15 +20,19 @@ def main(args):
 
     print(args)
     print('Start Tensorboard with "tensorboard --logdir=./runs", view at http://localhost:6006/')
-    tb_writer = SummaryWriter()
+    tb_writer = SummaryWriter(args.save_dir)
     if os.path.exists("./weights") is False:
         os.makedirs("./weights")
 
     data_transform = {
-        "train": transforms.Compose([transforms.Resize([1280, 1280]),
+        "train": transforms.Compose([transforms.Resize([1024, 832]),
+                                     transforms.RandomHorizontalFlip(),
+                                     transforms.RandomVerticalFlip(),
+                                     transforms.RandomRotation((-10, 10)),
                                      transforms.ToTensor(),
+                                     transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
                                      ]),
-        "val": transforms.Compose([transforms.Resize([1280, 1280]),
+        "val": transforms.Compose([transforms.Resize([1024, 832]),
                                    transforms.ToTensor(),
                                    ])}
     dir = args.data_path
@@ -60,8 +64,8 @@ def main(args):
                                              num_workers=nw)
 
     # 如果存在预训练权重则载入
-    model = Sigmoid(3, 1, 16)
-    # model = res50(3, 2)
+    # model = Sigmoid(3, 1, 16)
+    model = res50(3, 2)
     model.to(device)
 
     # 是否冻结权重
@@ -77,6 +81,7 @@ def main(args):
     lf = lambda x: ((1 + math.cos(x * math.pi / args.epochs)) / 2) * (1 - args.lrf) + args.lrf  # cosine
     scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)
     loss_function = torch.nn.BCEWithLogitsLoss()
+    best_acc = 0
     for epoch in range(args.epochs):
         # train
         sum_loss = train_one_epoch(model=model,
@@ -102,14 +107,17 @@ def main(args):
         tb_writer.add_scalar(tags[3], precision, epoch)
         tb_writer.add_scalar(tags[4], recall, epoch)
         tb_writer.add_scalar(tags[5], optimizer.param_groups[0]["lr"], epoch)
-
-        torch.save(model.state_dict(), "./weights/model-{}.pth".format(epoch))
+        if best_acc < acc:
+            torch.save(model.state_dict(), args.save_dir + 'best.pth')
+            best_acc = acc
+        torch.save(model.state_dict(), args.save_dir + 'last.pth')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--num_classes', type=int, default=2)
-    parser.add_argument('--type', type=str, default='GE')
+    parser.add_argument('--type', type=str, default='./runs')
+    parser.add_argument('--save_dir', type=str, default='GE')
     parser.add_argument('--epochs', type=int, default=50)
     parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--lr', type=float, default=0.001)
