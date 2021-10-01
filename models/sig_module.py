@@ -18,7 +18,7 @@ def res18( num_classes: int = 2):
 
 def den121(num_classes: int = 2):
     model = densenet121(pretrained=True)
-    model.fc = nn.Linear(1024, num_classes)
+    model.classifier = nn.Linear(model.classifier.in_features, num_classes)
     return model
 
 

@@ -131,9 +131,11 @@ def train_one_epoch(model, loss, optimizer, data_loader, device, epoch):
         if not torch.isfinite(loss):
             print('WARNING: non-finite loss, ending training ', loss)
             sys.exit(1)
-
-        optimizer.step()
-        optimizer.zero_grad()
+        if step != 0 and (step+1) % 4 == 0:
+            # 累加subdivision个batch的梯度后更新权重，并且梯度清零
+            # 再等subdivision个batch进行更新
+            optimizer.step()
+            optimizer.zero_grad()
 
     return sum_loss.item()
 
