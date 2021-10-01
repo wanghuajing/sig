@@ -105,8 +105,9 @@ class GE_dataset(Dataset):
     def __getitem__(self, index):
         imagePath = self.df.loc[index, 'image_path']
         imageLabel = self.df.loc[index, 'pathology_label']
+        # imageLabel = [int(self.df.loc[index, 'pathology_label'])]
         image = Image.open(imagePath)
-        # imageLabel = torch.LongTensor(imageLabel)
+        # imageLabel = torch.FloatTensor(imageLabel)
         image = image.convert("RGB")
         image = self.transform(image)  # cp val test不使用
         return image, imageLabel

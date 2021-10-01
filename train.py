@@ -34,6 +34,7 @@ def main(args):
                                      ]),
         "val": transforms.Compose([transforms.Resize([1024, 832]),
                                    transforms.ToTensor(),
+                                   transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
                                    ])}
     dir = args.data_path
     train_df = pd.read_csv(dir + '{}_train.csv'.format(args.type))
@@ -65,7 +66,7 @@ def main(args):
 
     # 如果存在预训练权重则载入
     # model = Sigmoid(3, 1, 16)
-    model = res18(3, 2)
+    model = res18(2)
     model.to(device)
 
     # 是否冻结权重
@@ -81,7 +82,10 @@ def main(args):
     # Scheduler https://arxiv.org/pdf/1812.01187.pdf
     lf = lambda x: ((1 + math.cos(x * math.pi / args.epochs)) / 2) * (1 - args.lrf) + args.lrf  # cosine
     scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)
-    loss_function = torch.nn.CrossEntropyLoss()
+    weight = torch.FloatTensor([3, 1])
+    loss_function = torch.nn.CrossEntropyLoss(weight=weight.to(device), reduction='mean')
+    # pos_weight = torch.ones([1]) * 3  # finetune
+    # loss_function = torch.nn.BCEWithLogitsLoss(reduction='mean', pos_weight=pos_weight.cuda())  # finetune
     best_acc = 0
     for epoch in range(args.epochs):
         # train
