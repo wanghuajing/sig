@@ -6,8 +6,9 @@ import random
 
 import torch
 from tqdm import tqdm
-
+from sklearn.metrics import roc_curve, roc_auc_score
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 def read_split_data(root: str, val_rate: float = 0.2):
@@ -118,7 +119,7 @@ def train_one_epoch(model, loss, optimizer, data_loader, device, epoch):
     optimizer.zero_grad()
 
     data_loader = tqdm(data_loader)
-
+    subdivision = 4
     for step, data in enumerate(data_loader):
         images, labels = data
         pred = model(images.to(device))
@@ -131,9 +132,8 @@ def train_one_epoch(model, loss, optimizer, data_loader, device, epoch):
         if not torch.isfinite(loss):
             print('WARNING: non-finite loss, ending training ', loss)
             sys.exit(1)
-        if step != 0 and (step+1) % 4 == 0:
-            # 累加subdivision个batch的梯度后更新权重，并且梯度清零
-            # 再等subdivision个batch进行更新
+        # 梯度累积
+        if step != 0 and (step + 1) % subdivision == 0:
             optimizer.step()
             optimizer.zero_grad()
 
@@ -147,20 +147,26 @@ def evaluate(model, loss, data_loader, device):
     sum_loss = torch.zeros(1).to(device)
     data_loader = tqdm(data_loader)
     cmt = torch.zeros(2, 2, dtype=torch.int64)
-    acc = 0
-    precision = 0
-    recall = 0
+    y = np.array([], dtype=np.int)
+    scores = np.array([])
     for step, data in enumerate(data_loader):
         images, labels = data
-        # labels = torch.zeros(labels.shape[0], 2).scatter_(1, labels, 1)
         pred = model(images.to(device))
         loss = loss_function(pred, labels.to(device))
         sum_loss = sum_loss + loss.detach()
-        predict = torch.softmax(pred, dim=1)
-        predict_cla = torch.argmax(predict, dim=1).cpu()
-        for i in range(len(predict_cla)):
-            cmt[predict_cla[i], labels[i]] += 1
-        acc = (cmt[0][0] + cmt[1][1]) / cmt.sum()
-        precision = cmt[1][1] / (cmt[1][0] + cmt[1][1])
-        recall = cmt[1][1] / (cmt[1][1] + cmt[0][1])
-    return sum_loss.item(), acc.item(), precision.item(), recall.item()
+
+        y = np.append(y, labels.numpy()[:, 0])
+        scores = np.append(scores, pred.cpu().numpy()[:, 0])
+
+    fpr, tpr, thresholds = roc_curve(y, scores, pos_label=1)
+    auc = roc_auc_score(y, scores)
+    J = tpr - fpr
+    idx = np.argmax(J)
+    best_threshold = thresholds[idx]
+    matrix = (scores > best_threshold).astype(np.int)
+    for i in range(len(matrix)):
+        cmt[matrix[i], y.astype(np.int)[i]] += 1
+    acc = (cmt[0][0] + cmt[1][1]) / cmt.sum()
+    precision = cmt[1][1] / (cmt[1][0] + cmt[1][1])
+    recall = cmt[1][1] / (cmt[1][1] + cmt[0][1])
+    return sum_loss.item(), acc, precision, recall, fpr, tpr, auc, idx, thresholds

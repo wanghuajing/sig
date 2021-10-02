@@ -13,6 +13,7 @@ from my_dataset import *
 from utils import read_split_data, train_one_epoch, evaluate
 from models.sig_module import *
 from models import *
+import matplotlib.pyplot as plt
 
 
 def main(args):
@@ -23,18 +24,18 @@ def main(args):
     tb_writer = SummaryWriter(args.save_dir)
     if os.path.exists("./weights") is False:
         os.makedirs("./weights")
-
+    size = [1024, 832]
     data_transform = {
-        "train": transforms.Compose([transforms.Resize([1024, 832]),
+        "train": transforms.Compose([transforms.Resize(size),
                                      # transforms.RandomHorizontalFlip(),
                                      # transforms.RandomVerticalFlip(),
                                      # transforms.RandomRotation((-10, 10)),
                                      transforms.ToTensor(),
-                                     # transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+                                     transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
                                      ]),
-        "val": transforms.Compose([transforms.Resize([1024, 832]),
+        "val": transforms.Compose([transforms.Resize(size),
                                    transforms.ToTensor(),
-                                   # transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+                                   transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
                                    ])}
     dir = args.data_path
     train_df = pd.read_csv(dir + '{}_train.csv'.format(args.type))
@@ -65,8 +66,7 @@ def main(args):
                                              num_workers=nw)
 
     # 如果存在预训练权重则载入
-    # model = Sigmoid(3, 1, 16)
-    model = den121(2)
+    model = DenseNet121(args.num_classes)
     model.to(device)
 
     # 是否冻结权重
@@ -76,17 +76,15 @@ def main(args):
             if "classifier" not in name:
                 para.requires_grad_(False)
 
-    pg = [p for p in model.parameters() if p.requires_grad]
     # optimizer = optim.SGD(pg, lr=args.lr, momentum=0.9, weight_decay=1E-4, nesterov=True)
     optimizer = optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.999), eps=1e-08, weight_decay=1e-5)
     # Scheduler https://arxiv.org/pdf/1812.01187.pdf
     lf = lambda x: ((1 + math.cos(x * math.pi / args.epochs)) / 2) * (1 - args.lrf) + args.lrf  # cosine
     scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)
-    weight = torch.FloatTensor([3, 1])
-    loss_function = torch.nn.CrossEntropyLoss(weight=weight.to(device), reduction='mean')
+    loss_function = torch.nn.BCELoss()
     # pos_weight = torch.ones([1]) * 3  # finetune
     # loss_function = torch.nn.BCEWithLogitsLoss(reduction='mean', pos_weight=pos_weight.cuda())  # finetune
-    best_acc = 0
+    best_auc = 0
     for epoch in range(args.epochs):
         # train
         sum_loss = train_one_epoch(model=model,
@@ -99,34 +97,49 @@ def main(args):
         scheduler.step()
         train_loss = sum_loss / len(train_loader)
         # validate
-        sum_loss, acc, precision, recall = evaluate(model=model,
-                                                    loss=loss_function,
-                                                    data_loader=val_loader,
-                                                    device=device)
-        val_loss = sum_loss / len(train_loader)
-        print("[epoch {}] ACC: {} P: {} R: {}".format(epoch + 1, round(acc, 2), round(precision, 2), round(recall, 2)))
-        tags = ["loss/train", "loss/val", "metric/Acc", "metric/Precision", "metric/Recall", "learning_rate"]
+        sum_loss, acc, precision, recall, fpr, tpr, auc, idx, thresholds = evaluate(model=model,
+                                                                                    loss=loss_function,
+                                                                                    data_loader=val_loader,
+                                                                                    device=device)
+        val_loss = sum_loss / len(val_loader)
+        if best_auc < auc:
+            torch.save(model.state_dict(), args.save_dir + 'best.pth')
+            best_auc = auc
+            plt.figure(clear=True)
+            plt.plot(fpr, tpr, linewidth=2, label="ROC")
+            plt.xlabel("false positive rate")
+            plt.ylabel("true positive rate")
+            plt.ylim(0, 1.05)
+            plt.xlim(0, 1.05)
+            plt.legend(loc=4)  # 图例的位置
+            plt.title('Epoch:{}--AUC:{}'.format(epoch, round(auc, 2)))
+            plt.plot(fpr[idx], tpr[idx], marker="^", c='r')
+            plt.annotate("({:.2f},{:.2f})".format(fpr[idx], tpr[idx]), xy=[fpr[idx], tpr[idx]], xytext=(20, -10),
+                         textcoords='offset points')
+            plt.annotate("Thresholds:{:.2f}".format(thresholds[idx]), xy=[fpr[idx], tpr[idx]], xytext=(20, -20),
+                         textcoords='offset points')
+            plt.savefig(args.save_dir + 'AUC.png')
+        torch.save(model.state_dict(), args.save_dir + 'last.pth')
+        print("[epoch {}] AUC:{}".format(epoch + 1, auc))
+        tags = ["loss/train", "loss/val", "metric/Acc", "metric/Precision", "metric/Recall", "metric/AUC",
+                "learning_rate"]
         tb_writer.add_scalar(tags[0], train_loss, epoch)
         tb_writer.add_scalar(tags[1], val_loss, epoch)
         tb_writer.add_scalar(tags[2], acc, epoch)
         tb_writer.add_scalar(tags[3], precision, epoch)
         tb_writer.add_scalar(tags[4], recall, epoch)
-        tb_writer.add_scalar(tags[5], optimizer.param_groups[0]["lr"], epoch)
-        print(optimizer.param_groups[0]["lr"])
-        if best_acc < acc:
-            torch.save(model.state_dict(), args.save_dir + 'best.pth')
-            best_acc = acc
-        torch.save(model.state_dict(), args.save_dir + 'last.pth')
+        tb_writer.add_scalar(tags[5], auc, epoch)
+        tb_writer.add_scalar(tags[6], optimizer.param_groups[0]["lr"], epoch)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--num_classes', type=int, default=2)
+    parser.add_argument('--num_classes', type=int, default=1)
     parser.add_argument('--type', type=str, default='./runs')
     parser.add_argument('--save_dir', type=str, default='GE')
     parser.add_argument('--epochs', type=int, default=50)
     parser.add_argument('--batch_size', type=int, default=16)
-    parser.add_argument('--lr', type=float, default=0.001)
+    parser.add_argument('--lr', type=float, default=0.0001)
     parser.add_argument('--lrf', type=float, default=0.1)
     parser.add_argument('--num_worker', type=int, default=8)
 
