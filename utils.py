@@ -119,7 +119,7 @@ def train_one_epoch(model, loss, optimizer, data_loader, device, epoch):
     optimizer.zero_grad()
 
     data_loader = tqdm(data_loader)
-    subdivision = 4
+    subdivision = 6
     for step, data in enumerate(data_loader):
         images, labels = data
         pred = model(images.to(device))
@@ -127,7 +127,7 @@ def train_one_epoch(model, loss, optimizer, data_loader, device, epoch):
         loss.backward()
         sum_loss = sum_loss + loss.detach()  # update mean losses
 
-        data_loader.desc = "[epoch {}]".format(epoch + 1)
+        data_loader.desc = "[epoch {}]".format(epoch)
 
         if not torch.isfinite(loss):
             print('WARNING: non-finite loss, ending training ', loss)
@@ -169,4 +169,4 @@ def evaluate(model, loss, data_loader, device):
     acc = (cmt[0][0] + cmt[1][1]) / cmt.sum()
     precision = cmt[1][1] / (cmt[1][0] + cmt[1][1])
     recall = cmt[1][1] / (cmt[1][1] + cmt[0][1])
-    return sum_loss.item(), acc, precision, recall, fpr, tpr, auc, idx, thresholds
+    return sum_loss.item(), acc.item(), precision.item(), recall.item(), fpr, tpr, auc, idx, thresholds

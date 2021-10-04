@@ -26,10 +26,7 @@ class DenseNet121(nn.Module):
         super(DenseNet121, self).__init__()
         self.densenet121 = models.densenet121(pretrained=True)
         num_ftrs = self.densenet121.classifier.in_features
-        self.densenet121.classifier = nn.Sequential(
-            nn.Linear(num_ftrs, out_size),
-            nn.Sigmoid()
-        )
+        self.densenet121.classifier = nn.Linear(num_ftrs, out_size)
 
     def forward(self, x):
         x = self.densenet121(x)
@@ -38,7 +35,7 @@ class DenseNet121(nn.Module):
 
 class DenseNet121_z(nn.Module):
 
-    def __init__(self, classCount, isTrained, pool_type='average'):
+    def __init__(self, classCount, isTrained=True, pool_type='average'):
 
         super(DenseNet121_z, self).__init__()
 
@@ -46,7 +43,7 @@ class DenseNet121_z(nn.Module):
         self.densenet121 = models.densenet121(pretrained=isTrained)
         kernelCount = self.densenet121.classifier.in_features
         # zhao
-        self.densenet121.classifier = nn.Sequential(nn.Linear(kernelCount, classCount), nn.Sigmoid())
+        self.densenet121.classifier = nn.Linear(kernelCount, classCount)
 
     def forward(self, x):
         features = self.densenet121.features(x)
