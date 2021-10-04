@@ -92,12 +92,12 @@ def main(args):
     # Scheduler https://arxiv.org/pdf/1812.01187.pdf
     lf = lambda x: ((1 + math.cos(x * math.pi / args.epochs)) / 2) * (1 - args.lrf) + args.lrf  # cosine
     scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)
-    loss_function = torch.nn.BCEWithLogitsLoss()
+    loss_function = torch.nn.BCELoss()
     # pos_weight = torch.ones([1]) * 3  # finetune
     # loss_function = torch.nn.BCEWithLogitsLoss(reduction='mean', pos_weight=pos_weight.cuda())  # finetune
     best_auc = 0
     results = pd.DataFrame(
-        columns=["loss/train", "loss/val", "metric/Acc", "metric/Precision", "metric/Recall", "metric/AUC"])
+        columns=["loss/train", "loss/val", "metric/Acc", "metric/Precision", "metric/Recall", "metric/AUC","thresholds"])
     for epoch in range(args.epochs):
         # train
         sum_loss = train_one_epoch(model=model,
@@ -134,7 +134,7 @@ def main(args):
             plt.savefig(args.save_dir + 'AUC.png')
         torch.save(model.state_dict(), args.save_dir + 'last.pth')
         print("[epoch {}] AUC:{}".format(epoch, auc))
-        tags = ["loss/train", "loss/val", "metric/Acc", "metric/Precision", "metric/Recall", "metric/AUC",
+        tags = ["loss/train", "loss/val", "metric/Acc", "metric/Precision", "metric/Recall", "metric/AUC","metric/thresholds",
                 "learning_rate"]
         tb_writer.add_scalar(tags[0], train_loss, epoch)
         tb_writer.add_scalar(tags[1], val_loss, epoch)
@@ -142,11 +142,13 @@ def main(args):
         tb_writer.add_scalar(tags[3], precision, epoch)
         tb_writer.add_scalar(tags[4], recall, epoch)
         tb_writer.add_scalar(tags[5], auc, epoch)
-        tb_writer.add_scalar(tags[6], optimizer.param_groups[0]["lr"], epoch)
+        tb_writer.add_scalar(tags[6], thresholds[idx], epoch)
+        tb_writer.add_scalar(tags[7], optimizer.param_groups[0]["lr"], epoch)
         result = pd.DataFrame(
             {"loss/train": train_loss, "loss/val": val_loss, "metric/Acc": acc, "metric/Precision": precision,
              "metric/Recall": recall,
              "metric/AUC": auc,
+             "thresholds": thresholds[idx],
              }, index=[1])
         results = results.append(result, ignore_index=True)
         results.to_csv(args.save_dir + 'results.csv')
