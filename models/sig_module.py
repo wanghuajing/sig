@@ -43,7 +43,7 @@ class DenseNet121_z(nn.Module):
         self.densenet121 = models.densenet121(pretrained=isTrained)
         kernelCount = self.densenet121.classifier.in_features
         # zhao
-        self.densenet121.classifier = nn.Linear(kernelCount, classCount)
+        self.densenet121.classifier = nn.Sequential(nn.Linear(kernelCount, classCount), nn.Sigmoid())
 
     def forward(self, x):
         features = self.densenet121.features(x)
@@ -97,7 +97,7 @@ class Sigmoid(nn.Module):
             nn.BatchNorm2d(n)
         )
         self.module4 = nn.Conv2d(n, 3, kernel_size=(7, 7), padding=(3, 3))
-        self.resnet50 = res50(3, 2)
+        self.den121 = DenseNet121(1)
 
     def forward(self, x):
         out = self.module1(x)
@@ -107,7 +107,7 @@ class Sigmoid(nn.Module):
         out = out + out_residual
         out = self.module4(out)
         out = out + x
-        out = self.resnet50(out)
+        out = self.den121(out)
         return out
 
 
@@ -115,16 +115,51 @@ class Sigmoid(nn.Module):
 class sig_add(nn.Module):
     def __init__(self):
         super().__init__()
-        self.base = res50(1, 20)
+        self.base = res50(10)
         self.sig = nn.Sigmoid()
-        self.classification = res50(1, 2)
+        self.den121 = DenseNet121(1)
 
     def forward(self, x):
         out = self.base(x)
-        img = x
-        for i in range(out.shape[1] // 2):
-            for j in range(out.shape[0]):
-                x1 = (x[j, ...] - out[j, i * 2]) / out[j, i * 2 + 1]
-                img = img + x1
-        out = self.classification(img)
+        x1 = (out[:, 0]).reshape([4, 1, 1, 1])
+        y1 = (out[:, 1]).reshape([4, 1, 1, 1])
+        x2 = (out[:, 2]).reshape([4, 1, 1, 1])
+        y2 = (out[:, 3]).reshape([4, 1, 1, 1])
+        x3 = (out[:, 4]).reshape([4, 1, 1, 1])
+        y3 = (out[:, 5]).reshape([4, 1, 1, 1])
+        x4 = (out[:, 6]).reshape([4, 1, 1, 1])
+        y4 = (out[:, 7]).reshape([4, 1, 1, 1])
+        x5 = (out[:, 8]).reshape([4, 1, 1, 1])
+        y5 = (out[:, 9]).reshape([4, 1, 1, 1])
+        x = (self.sig((x - x1) / y1) + self.sig((x - x2) / y2) + self.sig((x - x3) / y3) + self.sig(
+            (x - x4) / y4) + self.sig((x - x5) / y5)) / 5
+        x = self.den121(x)
+        return x
+
+
+class single_sig(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.base = res50(2)
+        self.sig = nn.Sigmoid()
+        self.den121 = DenseNet121(1)
+
+    def forward(self, x):
+        out = self.base(x)
+        x1 = (out[:, 0]).reshape([4, 1, 1, 1])
+        x2 = (out[:, 1]).reshape([4, 1, 1, 1])
+        x = (x - x1) / x2
+        x = self.sig(x)
+        x = self.den121(x)
+        return x
+
+
+class test(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.base = res50(2)
+        self.den121 = DenseNet121(1)
+
+    def forward(self, x):
+        out = self.den121(x)
         return out

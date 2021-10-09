@@ -26,18 +26,18 @@ def main(args):
     tb_writer = SummaryWriter(args.save_dir)
     if os.path.exists("./weights") is False:
         os.makedirs("./weights")
-    size = [1024, 832]
+    size = [1024, 512]
     data_transform = {
         "train": transforms.Compose([transforms.Resize(size),
-                                     transforms.RandomHorizontalFlip(),
-                                     transforms.RandomVerticalFlip(),
-                                     transforms.RandomRotation((-10, 10)),
+                                     # transforms.RandomHorizontalFlip(),
+                                     # transforms.RandomVerticalFlip(),
+                                     # transforms.RandomRotation((-10, 10)),
                                      transforms.ToTensor(),
-                                     transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+                                     # transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
                                      ]),
         "val": transforms.Compose([transforms.Resize(size),
                                    transforms.ToTensor(),
-                                   transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+                                   # transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
                                    ])}
     dir = args.data_path
     train_df = pd.read_csv(dir + '{}_train.csv'.format(args.type))
@@ -67,37 +67,43 @@ def main(args):
                                              pin_memory=True,
                                              num_workers=nw)
 
-    # 如果存在预训练权重则载入
+    # 选择模型
     model = DenseNet121(args.num_classes)
-    # model = res18(args.num_classes)
+    # model = DenseNet121_z(args.num_classes)
+    # model = sig_add()
+    # model = Sigmoid(3, 2, 12)
+    # model = single_sig()
+    # model = test()
     model.to(device)
-    # 导入预训练权重
+    # 导入部分预训练权重
     if args.checkpoint is not None:
         model_dict = model.state_dict()
         pretrained_dict = torch.load(args.checkpoint)
-        pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
+        pretrained_dict = {'den121.' + k: v for k, v in pretrained_dict.items() if 'den121.' + k in model_dict}
         model_dict.update(pretrained_dict)
         model.load_state_dict(OrderedDict(model_dict))
-
+    # 导入全部预训练权重
+    # if args.checkpoint is not None:
+    #     model.load_state_dict(torch.load(args.checkpoint))
     # 是否冻结权重
-    if args.freeze_layers:
-        for name, para in model.named_parameters():
-            # 除最后的全连接层外，其他权重全部冻结
-            if "classifier" not in name:
-                para.requires_grad_(False)
-
+    # for name, para in model.named_parameters():
+    #     if 'den121' in name:
+    #         para.requires_grad = False
+    # params = [p for p in model.parameters() if p.requires_grad]
     # optimizer = optim.SGD(pg, lr=args.lr, momentum=0.9, weight_decay=1E-4, nesterov=True)
+    # filter(lambda p: p.requires_grad, model.parameters())
     optimizer = optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.999), eps=1e-08, weight_decay=1e-5)
-    # scheduler = ReduceLROnPlateau(optimizer, factor=0.1, patience=2, mode='max')
+    scheduler = ReduceLROnPlateau(optimizer, factor=0.2, patience=2, mode='max')
+    # lf = lambda x: ((1 + math.cos(x * math.pi / args.epochs)) / 2) * (1 - args.lrf) + args.lrf  # cosine
+    # scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)
     # Scheduler https://arxiv.org/pdf/1812.01187.pdf
-    lf = lambda x: ((1 + math.cos(x * math.pi / args.epochs)) / 2) * (1 - args.lrf) + args.lrf  # cosine
-    scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)
     loss_function = torch.nn.BCELoss()
     # pos_weight = torch.ones([1]) * 3  # finetune
     # loss_function = torch.nn.BCEWithLogitsLoss(reduction='mean', pos_weight=pos_weight.cuda())  # finetune
     best_auc = 0
     results = pd.DataFrame(
-        columns=["loss/train", "loss/val", "metric/Acc", "metric/Precision", "metric/Recall", "metric/AUC","thresholds"])
+        columns=["loss/train", "loss/val", "metric/Acc", "metric/Precision", "metric/Recall", "metric/AUC",
+                 "thresholds"])
     for epoch in range(args.epochs):
         # train
         sum_loss = train_one_epoch(model=model,
@@ -113,7 +119,7 @@ def main(args):
                                                                                     loss=loss_function,
                                                                                     data_loader=val_loader,
                                                                                     device=device)
-        scheduler.step()
+        scheduler.step(auc)
         val_loss = sum_loss / len(val_loader)
         if best_auc < auc:
             torch.save(model.state_dict(), args.save_dir + 'best.pth')
@@ -134,7 +140,8 @@ def main(args):
             plt.savefig(args.save_dir + 'AUC.png')
         torch.save(model.state_dict(), args.save_dir + 'last.pth')
         print("[epoch {}] AUC:{}".format(epoch, auc))
-        tags = ["loss/train", "loss/val", "metric/Acc", "metric/Precision", "metric/Recall", "metric/AUC","metric/thresholds",
+        tags = ["loss/train", "loss/val", "metric/Acc", "metric/Precision", "metric/Recall", "metric/AUC",
+                "metric/thresholds",
                 "learning_rate"]
         tb_writer.add_scalar(tags[0], train_loss, epoch)
         tb_writer.add_scalar(tags[1], val_loss, epoch)
