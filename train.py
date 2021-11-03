@@ -69,7 +69,9 @@ def main(args):
     # model = Sigmoid(3, 2, 12)
     # model = single_sig()
     # model = test()
-
+    device_ids = [1, 2]
+    if torch.cuda.device_count() > 1:
+        model = nn.DataParallel(model, device_ids=device_ids)
     model.to(device)
     # 导入部分预训练权重
     # if args.checkpoint is not None:
