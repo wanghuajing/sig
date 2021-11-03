@@ -4,23 +4,19 @@ import torch.nn.functional as F
 import torch
 
 
-def res50(num_classes: int = 2):
-    model = models.resnet50(pretrained=True)
-    model.fc = nn.Linear(2048, num_classes)
-    return model
+class ResNet50(nn.Module):
+    def __init__(self, out_size):
+        super(ResNet50, self).__init__()
+        self.resnet50 = models.resnet50(pretrained=False)
+        self.resnet50.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        self.resnet50.fc = nn.Sequential(nn.Linear(2048, out_size), nn.Sigmoid())
 
-
-def res18(num_classes: int = 2):
-    model = models.resnet18(pretrained=True)
-    model.fc = nn.Linear(512, num_classes)
-    return model
+    def forward(self, x):
+        x = self.resnet50(x)
+        return x
 
 
 class DenseNet121(nn.Module):
-    """Model modified.
-    The architecture of our model is the same as standard DenseNet121
-    except the classifier layer which has an additional sigmoid function.
-    """
 
     def __init__(self, out_size):
         super(DenseNet121, self).__init__()
@@ -31,32 +27,6 @@ class DenseNet121(nn.Module):
     def forward(self, x):
         x = self.densenet121(x)
         return x
-
-
-class DenseNet121_z(nn.Module):
-
-    def __init__(self, classCount, isTrained=True, pool_type='average'):
-
-        super(DenseNet121_z, self).__init__()
-
-        self.pool_type = pool_type
-        self.densenet121 = models.densenet121(pretrained=isTrained)
-        kernelCount = self.densenet121.classifier.in_features
-        # zhao
-        self.densenet121.classifier = nn.Sequential(nn.Linear(kernelCount, classCount), nn.Sigmoid())
-
-    def forward(self, x):
-        features = self.densenet121.features(x)
-        out = F.relu(features, inplace=True)
-        # out = out*mask
-        if self.pool_type == 'average':
-            out = F.adaptive_avg_pool2d(out, (1, 1)).view(features.size(0), -1)
-        elif self.pool_type == 'max':
-            out = F.adaptive_max_pool2d(out, (1, 1)).view(features.size(0), -1)
-        else:
-            raise NotImplementedError(self.pool_type + ' : not implemented!')
-        out = self.densenet121.classifier(out)
-        return out
 
 
 class ResBlock(nn.Module):
@@ -115,7 +85,7 @@ class Sigmoid(nn.Module):
 class sig_add(nn.Module):
     def __init__(self):
         super().__init__()
-        self.base = res50(10)
+        self.base = ResNet50(10)
         self.sig = nn.Sigmoid()
         self.den121 = DenseNet121(1)
 
@@ -140,7 +110,7 @@ class sig_add(nn.Module):
 class single_sig(nn.Module):
     def __init__(self):
         super().__init__()
-        self.base = res50(2)
+        self.base = ResNet50(2)
         self.sig = nn.Sigmoid()
         self.den121 = DenseNet121(1)
 
@@ -157,9 +127,58 @@ class single_sig(nn.Module):
 class test(nn.Module):
     def __init__(self):
         super().__init__()
-        self.base = res50(2)
+        self.base = ResNet50(2)
         self.den121 = DenseNet121(1)
 
     def forward(self, x):
         out = self.den121(x)
+        return out
+
+
+class enhance_net_nopool(nn.Module):
+
+    def __init__(self):
+        super(enhance_net_nopool, self).__init__()
+
+        self.relu = nn.ReLU(inplace=True)
+
+        number_f = 32
+        self.e_conv1 = nn.Conv2d(1, number_f, 3, 1, 1, bias=True)
+        self.e_conv2 = nn.Conv2d(number_f, number_f, 3, 1, 1, bias=True)
+        self.e_conv3 = nn.Conv2d(number_f, number_f, 3, 1, 1, bias=True)
+        self.e_conv4 = nn.Conv2d(number_f, number_f, 3, 1, 1, bias=True)
+        self.e_conv5 = nn.Conv2d(number_f * 2, number_f, 3, 1, 1, bias=True)
+        self.e_conv6 = nn.Conv2d(number_f * 2, number_f, 3, 1, 1, bias=True)
+        self.e_conv7 = nn.Conv2d(number_f * 2, 8, 3, 1, 1, bias=True)
+
+        self.maxpool = nn.MaxPool2d(2, stride=2, return_indices=False, ceil_mode=False)
+        self.upsample = nn.UpsamplingBilinear2d(scale_factor=2)
+        self.classifier = ResNet50(1)
+
+    def forward(self, x):
+        x1 = self.relu(self.e_conv1(x))
+        # p1 = self.maxpool(x1)
+        x2 = self.relu(self.e_conv2(x1))
+        # p2 = self.maxpool(x2)
+        x3 = self.relu(self.e_conv3(x2))
+        # p3 = self.maxpool(x3)
+        x4 = self.relu(self.e_conv4(x3))
+
+        x5 = self.relu(self.e_conv5(torch.cat([x3, x4], 1)))
+        # x5 = self.upsample(x5)
+        x6 = self.relu(self.e_conv6(torch.cat([x2, x5], 1)))
+
+        x_r = torch.tanh(self.e_conv7(torch.cat([x1, x6], 1)))
+        r1, r2, r3, r4, r5, r6, r7, r8 = torch.split(x_r, 1, dim=1)
+
+        x = x + r1 * (torch.pow(x, 2) - x)
+        x = x + r2 * (torch.pow(x, 2) - x)
+        x = x + r3 * (torch.pow(x, 2) - x)
+        enhance_image_1 = x + r4 * (torch.pow(x, 2) - x)
+        x = enhance_image_1 + r5 * (torch.pow(enhance_image_1, 2) - enhance_image_1)
+        x = x + r6 * (torch.pow(x, 2) - x)
+        x = x + r7 * (torch.pow(x, 2) - x)
+        enhance_image = x + r8 * (torch.pow(x, 2) - x)
+        r = torch.cat([r1, r2, r3, r4, r5, r6, r7, r8], 1)
+        out = self.classifier(enhance_image)
         return out

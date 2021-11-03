@@ -9,7 +9,7 @@ from tqdm import tqdm
 from sklearn.metrics import roc_curve, roc_auc_score
 import matplotlib.pyplot as plt
 import numpy as np
-
+import cv2
 
 def read_split_data(root: str, val_rate: float = 0.2):
     random.seed(0)  # 保证随机结果可复现
@@ -123,6 +123,7 @@ def train_one_epoch(model, loss, optimizer, data_loader, device, epoch):
     for step, data in enumerate(data_loader):
         images, labels = data
         pred = model(images.to(device))
+
         loss = loss_function(pred, labels.to(device))
         loss.backward()
         sum_loss = sum_loss + loss.detach()  # update mean losses

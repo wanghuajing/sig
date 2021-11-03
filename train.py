@@ -27,30 +27,23 @@ def main(args):
     if os.path.exists("./weights") is False:
         os.makedirs("./weights")
     size = [1024, 512]
-    data_transform = {
-        "train": transforms.Compose([transforms.Resize(size),
-                                     # transforms.RandomHorizontalFlip(),
-                                     # transforms.RandomVerticalFlip(),
-                                     # transforms.RandomRotation((-10, 10)),
-                                     transforms.ToTensor(),
-                                     # transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-                                     ]),
-        "val": transforms.Compose([transforms.Resize(size),
-                                   transforms.ToTensor(),
-                                   # transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-                                   ])}
+    # GE1 = [0.218, 0.218, 0.218]
+    # GE2 = [0.164, 0.164, 0.164]
+    # HLG1 = [0.276, 0.276, 0.276]
+    # HLG2 = [0.176, 0.176, 0.176]
+
     dir = args.data_path
     train_df = pd.read_csv(dir + '{}_train.csv'.format(args.type))
     val_df = pd.read_csv(dir + '{}_val.csv'.format(args.type))
     # 实例化训练数据集
     train_data_set = GE_dataset(pathImageDirectory=dir,
                                 df=train_df,
-                                transform=data_transform["train"])
+                                data='train')
 
     # 实例化验证数据集
     val_data_set = GE_dataset(pathImageDirectory=dir,
                               df=val_df,
-                              transform=data_transform["val"])
+                              data='val')
 
     batch_size = args.batch_size
     nw = args.num_worker  # number of workers
@@ -68,23 +61,26 @@ def main(args):
                                              num_workers=nw)
 
     # 选择模型
-    model = DenseNet121(args.num_classes)
+    model = enhance_net_nopool()
+    # model = DenseNet121(args.num_classes)
+    # model = ResNet50(args.num_classes)
     # model = DenseNet121_z(args.num_classes)
     # model = sig_add()
     # model = Sigmoid(3, 2, 12)
     # model = single_sig()
     # model = test()
+
     model.to(device)
     # 导入部分预训练权重
-    if args.checkpoint is not None:
-        model_dict = model.state_dict()
-        pretrained_dict = torch.load(args.checkpoint)
-        pretrained_dict = {'den121.' + k: v for k, v in pretrained_dict.items() if 'den121.' + k in model_dict}
-        model_dict.update(pretrained_dict)
-        model.load_state_dict(OrderedDict(model_dict))
-    # 导入全部预训练权重
     # if args.checkpoint is not None:
-    #     model.load_state_dict(torch.load(args.checkpoint))
+    #     model_dict = model.state_dict()
+    #     pretrained_dict = torch.load(args.checkpoint)
+    #     pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
+    #     model_dict.update(pretrained_dict)
+    #     model.load_state_dict(OrderedDict(model_dict))
+    # 导入全部预训练权重
+    if args.checkpoint is not None:
+        model.load_state_dict(torch.load(args.checkpoint))
     # 是否冻结权重
     # for name, para in model.named_parameters():
     #     if 'den121' in name:
@@ -138,7 +134,7 @@ def main(args):
             plt.annotate("Thresholds:{:.2f}".format(thresholds[idx]), xy=[fpr[idx], tpr[idx]], xytext=(20, -20),
                          textcoords='offset points')
             plt.savefig(args.save_dir + 'AUC.png')
-        torch.save(model.state_dict(), args.save_dir + 'last.pth')
+        torch.save(model.state_dict(), args.save_dir + 'e_{}.pth'.format(epoch))
         print("[epoch {}] AUC:{}".format(epoch, auc))
         tags = ["loss/train", "loss/val", "metric/Acc", "metric/Precision", "metric/Recall", "metric/AUC",
                 "metric/thresholds",

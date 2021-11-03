@@ -16,31 +16,30 @@ def add_name():
 
 
 def dcm2png():
-    path = '/home/zhao/mydata/datasets/GE/'
+    path = '/home/zhao/mydata/datasets/GE/origin/'
     df = pd.read_csv(path + 'GE_all.csv')
     error_item = pd.DataFrame(columns=['image_path'])
     for i in tqdm(range(len(df))):
         imagepath = path + df.loc[i, 'image_path']
         ### 窗宽窗位调整
-        try:
-            dcm = pydicom.dcmread(imagepath)
-            image = dcm.pixel_array
-            wc = int(dcm['0028', '1050'][0])
-            ww = int(dcm['0028', '1051'][0])
-            image = image.astype(np.int16)
-            image = 1 / (1 + np.exp(-4 * (image - wc) / ww))
-            image = (image * 255).astype(np.uint8)
-            cv2.imwrite(imagepath[0:-3] + 'png', image)
-        except:
-            print(imagepath)
-            error_item = error_item.append({'image_path': imagepath}, ignore_index=True)
+        # try:
+        dcm = pydicom.dcmread(imagepath)
+        image = dcm.pixel_array
+        # 通过窗宽窗位归一化
+        # wc = int(dcm['0028', '1050'][2]) - 200
+        # ww = int(dcm['0028', '1051'][2])
+        # image = image.astype(np.int16)
+        # image = 1 / (1 + np.exp(-4 * (image - wc) / ww))
+        # image = (image * 255).astype(np.uint8)
+        image = (image / 4095 * 65535).astype(np.uint16)
 
-    error_item.to_csv('error.csv', index=False)
+        cv2.imwrite(imagepath[0:-3] + 'png', image)
+        print(imagepath)
 
 
 def crop_img():
     path = '/home/zhao/mydata/datasets/GE/origin/'
-    df = pd.read_csv(path + 'GE_all.csv')
+    df = pd.read_csv(path + 'GE_all_png.csv')
     for i in tqdm(range(len(df))):
         imagepath = path + df.loc[i, 'image_path']
         image = cv2.imread(imagepath, -1)
@@ -81,11 +80,85 @@ def crop_img():
         mask = mask / 255
         # image = image * mask
         image = image[y0:y1, x0:x1]
-        imagepath = imagepath.replace('origin', 'crop')
+        imagepath = imagepath.replace('origin', 'crop_16')
         os.makedirs('/'.join(imagepath.split('/')[0:-1]), exist_ok=True)
         cv2.imwrite(imagepath, image)
-        # cv2.imwrite('/home/zhao/mydata/datasets/GE/crop/'+imagepath.split('/')[-1],image)
+        # cv2.imwrite('/home/zhao/mydata/projects/MSVCL_MICCAI2021/datasets/3/' + imagepath.split('/')[-1], image)
+        # if i == 100:
+        #     break
+
+
+def compute_x():
+    # path = '/home/zhao/mydata/datasets/GE/crop/'
+    # df = pd.read_csv(path + 'GE_DEL_U.csv')
+    path = '/home/zhao/mydata/datasets/HLG/crop/'
+    df = pd.read_csv(path + 'HLG_del_U.csv')
+    y1, y2, y3, y4 = 0, 0, 0, 0
+    for i in tqdm(range(len(df))):
+        imagepath = path + df.loc[i, 'image_path']
+        image = cv2.imread(imagepath, -1) / 255
+        x1 = image.sum() / (image != 0).sum()
+        image2 = image * image
+        x2 = image2.sum() / (image2 != 0).sum()
+        image3 = image2 * image
+        x3 = image3.sum() / (image3 != 0).sum()
+        image4 = image3 * image
+        x4 = image4.sum() / (image4 != 0).sum()
+        y1 += x1
+        y2 += x2
+        y3 += x3
+        y4 += x4
+    y1 /= len(df)
+    y2 /= len(df)
+    y3 /= len(df)
+    y4 /= len(df)
+    print(y1, y2, y3, y4)
+
+
+def copy_img():
+    path = '/home/zhao/mydata/datasets/GE/crop/'
+    df = pd.read_csv(path + 'GE_DEL_U.csv')
+    for i in tqdm(range(1000)):
+        imagepath = path + df.loc[i, 'image_path']
+        image = cv2.imread(imagepath, -1)
+        cv2.imwrite(
+            '/home/zhao/mydata/projects/MSVCL_MICCAI2021/datasets/my_G2H/trainA/' +
+            df.loc[i, 'image_path'].split(sep='/')[-1],
+            image)
+        # if i == 1000:
+        #     break
+
+
+def compute():
+    path = '/home/zhao/mydata/datasets/cyclegan/transfer/trainA/'
+    lists = os.listdir(path)
+    y1, y2 = 0, 0
+    for n in tqdm(lists):
+        image = cv2.imread(path + n, -1)
+        x1 = image.sum() / (image != 0).sum()
+        image2 = image * image
+        x2 = image2.sum() / (image2 != 0).sum()
+        y1 += x1
+        y2 += x2
+    y1 /= 1000
+    y2 /= 1000
+    std = np.sqrt(y2 - y1 ** 2)
+    print(y1, std)
+
+
+def trans8():
+    path = '/home/zhao/mydata/datasets/cyclegan/transfer512/HLG_full/'
+    path1 = '/home/zhao/mydata/datasets/cyclegan/transfer512/B/'
+    lists = os.listdir(path)
+    for n in tqdm(lists):
+        image = cv2.imread(path + n, -1)
+        if image.shape[1] >= 512:
+            cv2.imwrite(path1 + n, image)
 
 
 if __name__ == '__main__':
-    crop_img()
+    path = '/home/zhao/mydata/projects/sig/1.png'
+    path2 = '/home/zhao/mydata/projects/sig/2.png'
+    img = cv2.imread(path, -1)
+    img1 = cv2.imread(path2, -1)
+    a=1

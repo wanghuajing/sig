@@ -6,6 +6,23 @@ from torch.utils.data import Dataset
 import cv2
 import pydicom
 import numpy as np
+import torchvision.transforms as transforms
+
+
+def get_transform(data):
+    size = [1024, 512]
+    if data == 'train':
+        transform_list = [transforms.Resize(size),
+                          # transforms.RandomHorizontalFlip(),
+                          # transforms.RandomRotation(10)
+                          ]
+    else:
+        transform_list = [transforms.RandomCrop([1024, 512])]
+
+    transform_list += [transforms.ToTensor()]
+    # transform_list += [transforms.Normalize((0.5,), (0.5,))]
+
+    return transforms.Compose(transform_list)
 
 
 def make_pathology(pathology):
@@ -17,80 +34,11 @@ def make_pathology(pathology):
         return 0
 
 
-class MyDataSet(Dataset):
-
-    # --------------------------------------------------------------------------------
-
-    def __init__(self, pathImageDirectory, df, transform):
-        # df = pd.DataFrame()
-        df.reset_index(drop=True, inplace=True)
-        df.loc[:, 'image_path'] = pathImageDirectory + df['image_path']
-        df['pathology_label'] = df['pathology_label'].apply(make_pathology)
-
-        self.df = df
-        self.df.reset_index(drop=True, inplace=True)
-        self.transform = transform
-
-    # --------------------------------------------------------------------------------
-
-    def __getitem__(self, index):
-        imagePath = self.df.loc[index, 'image_path']
-        imageLabel = [self.df.loc[index, 'pathology_label']]
-
-        imageData = cv2.imread(imagePath, -1)
-        imageLabel = torch.LongTensor(imageLabel)
-        imageData = Image.fromarray(imageData, 'F')
-        imageInfo = self.df.loc[index].to_dict()
-
-        if self.transform != None: imageData = self.transform(imageData)  # cp val test不使用
-
-        return imageData, imageLabel, imageInfo
-
-    # --------------------------------------------------------------------------------
-
-    def __len__(self):
-        return len(self.df)
-
-
-class cbis_ddsm(Dataset):
-
-    # --------------------------------------------------------------------------------
-
-    def __init__(self, pathImageDirectory, df, transform):
-        # df = pd.DataFrame()
-        df.reset_index(drop=True, inplace=True)
-        df.loc[:, 'image_path'] = pathImageDirectory + df['image_path']
-        df['pathology_label'] = df['pathology_label'].apply(make_pathology)
-
-        self.df = df
-        self.df.reset_index(drop=True, inplace=True)
-        self.transform = transform
-
-    # --------------------------------------------------------------------------------
-
-    def __getitem__(self, index):
-        imagePath = self.df.loc[index, 'image_path']
-        imageLabel = [self.df.loc[index, 'pathology_label']]
-        imageData = pydicom.dcmread(imagePath).pixel_array
-        imageData = (imageData / (2 ** 16 - 1)).astype(np.float32)
-        imageLabel = torch.LongTensor(imageLabel)
-        imageData = Image.fromarray(imageData, 'F')
-
-        if self.transform is not None: imageData = self.transform(imageData)  # cp val test不使用
-
-        return imageData, imageLabel
-
-    # --------------------------------------------------------------------------------
-
-    def __len__(self):
-        return len(self.df)
-
-
 class GE_dataset(Dataset):
 
     # --------------------------------------------------------------------------------
 
-    def __init__(self, pathImageDirectory, df, transform):
+    def __init__(self, pathImageDirectory, df, data):
         # df = pd.DataFrame()
         df.reset_index(drop=True, inplace=True)
         df.loc[:, 'image_path'] = pathImageDirectory + df['image_path']
@@ -98,7 +46,7 @@ class GE_dataset(Dataset):
 
         self.df = df
         self.df.reset_index(drop=True, inplace=True)
-        self.transform = transform
+        self.transform = get_transform(data)
 
     # --------------------------------------------------------------------------------
 
@@ -106,8 +54,10 @@ class GE_dataset(Dataset):
         imagePath = self.df.loc[index, 'image_path']
         imageLabel = [self.df.loc[index, 'pathology_label']]
         imageLabel = torch.FloatTensor(imageLabel)
-        image = Image.open(imagePath).convert("RGB")
-        image = self.transform(image)  # cp val test不使用
+        image = Image.open(imagePath).convert("I")
+        image = self.transform(image)
+        image = image / 65535
+        image = transforms.Normalize((0.5,), (0.5,))(image)
         return image, imageLabel
 
     # --------------------------------------------------------------------------------
