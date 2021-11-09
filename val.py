@@ -25,7 +25,7 @@ def main(args):
     data_transform = {
         "val": transforms.Compose([transforms.Resize(size),
                                    transforms.ToTensor(),
-                                   transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+                                   # transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
                                    ])}
     dir = args.data_path
     val_df = pd.read_csv(args.csv)
@@ -44,17 +44,20 @@ def main(args):
                                              num_workers=nw)
 
     # 如果存在预训练权重则载入
-    # model = DenseNet121(args.num_classes)
-    model = test()
-    model.to(device)
+    model = DenseNet121(args.num_classes)
+    device_ids = [0, 1]
+    if torch.cuda.device_count() > 1:
+        model = nn.DataParallel(model, device_ids=device_ids)
+        model.to(device)
     # 导入预训练权重
+    # if args.checkpoint is not None:
+    #     model_dict = model.state_dict()
+    #     pretrained_dict = torch.load(args.checkpoint)
+    #     pretrained_dict = {'den121.' + k: v for k, v in pretrained_dict.items() if 'den121.' + k in model_dict}
+    #     model_dict.update(pretrained_dict)
+    #     model.load_state_dict(OrderedDict(model_dict))
     if args.checkpoint is not None:
-        model_dict = model.state_dict()
-        pretrained_dict = torch.load(args.checkpoint)
-        pretrained_dict = {'den121.' + k: v for k, v in pretrained_dict.items() if 'den121.' + k in model_dict}
-        model_dict.update(pretrained_dict)
-        model.load_state_dict(OrderedDict(model_dict))
-
+        model.load_state_dict(torch.load(args.checkpoint))
 
     loss_function = torch.nn.BCELoss()
     # pos_weight = torch.ones([1]) * 3  # finetune
@@ -69,7 +72,7 @@ def main(args):
     val_loss = sum_loss / len(val_loader)
     plt.figure(clear=True)
     plt.plot(fpr, tpr, linewidth=2, label="ROC")
-    plt.title('AUC:{}'.format(round(auc, 2)))
+    plt.title('AUC:{}'.format(round(auc, 3)))
     plt.xlabel("false positive rate")
     plt.ylabel("true positive rate")
     plt.ylim(0, 1.05)

@@ -17,6 +17,7 @@ from models import *
 import matplotlib.pyplot as plt
 from collections import OrderedDict
 from models import myloss
+from tqdm import tqdm
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "1,2"
 
@@ -65,7 +66,7 @@ def main(args):
 
     # 选择模型
     model = enhance_net_nopool()
-    # model = DenseNet121(args.num_classes)
+    # model = DenseNet121(alossrgs.num_classes)
     # model = ResNet50(args.num_classes)
     # model = DenseNet121_z(args.num_classes)
     # model = sig_add()
@@ -94,74 +95,43 @@ def main(args):
     # optimizer = optim.SGD(pg, lr=args.lr, momentum=0.9, weight_decay=1E-4, nesterov=True)
     # filter(lambda p: p.requires_grad, model.parameters())
     optimizer = optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.999), eps=1e-08, weight_decay=1e-5)
-    scheduler = ReduceLROnPlateau(optimizer, factor=0.2, patience=2, mode='max')
     # lf = lambda x: ((1 + math.cos(x * math.pi / args.epochs)) / 2) * (1 - args.lrf) + args.lrf  # cosine
     # scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)
     # Scheduler https://arxiv.org/pdf/1812.01187.pdf
-    loss_function = torch.nn.BCELoss()
+    # loss_function = torch.nn.BCELoss()
 
+    # zero_dence loss
+    L_color = myloss.L_color()
+    L_spa = myloss.L_spa()
+    L_exp = myloss.L_exp(16, 0.6)
+    L_TV = myloss.L_TV()
 
-    # pos_weight = torch.ones([1]) * 3  # finetune
-    # loss_function = torch.nn.BCEWithLogitsLoss(reduction='mean', pos_weight=pos_weight.cuda())  # finetune
-    best_auc = 0
-    results = pd.DataFrame(
-        columns=["loss/train", "loss/val", "metric/Acc", "metric/Precision", "metric/Recall", "metric/AUC",
-                 "thresholds"])
     for epoch in range(args.epochs):
-        # train
-        sum_loss = train_one_epoch(model=model,
-                                   loss=loss_function,
-                                   optimizer=optimizer,
-                                   data_loader=train_loader,
-                                   device=device,
-                                   epoch=epoch)
+        train_loader = tqdm(train_loader)
+        for iteration, data in enumerate(train_loader):
+            img_lowlight, _ = data
+            img_lowlight = img_lowlight.to(device)
 
-        train_loss = sum_loss / len(train_loader)
-        # validate
-        sum_loss, acc, precision, recall, fpr, tpr, auc, idx, thresholds = evaluate(model=model,
-                                                                                    loss=loss_function,
-                                                                                    data_loader=val_loader,
-                                                                                    device=device)
-        scheduler.step(auc)
-        val_loss = sum_loss / len(val_loader)
-        if best_auc < auc:
-            torch.save(model.state_dict(), args.save_dir + 'best.pth')
-            best_auc = auc
-            plt.figure(clear=True)
-            plt.plot(fpr, tpr, linewidth=2, label="ROC")
-            plt.xlabel("false positive rate")
-            plt.ylabel("true positive rate")
-            plt.ylim(0, 1.05)
-            plt.xlim(0, 1.05)
-            plt.legend(loc=4)  # 图例的位置
-            plt.title('Epoch:{}--AUC:{}'.format(epoch, round(auc, 2)))
-            plt.plot(fpr[idx], tpr[idx], marker="^", c='r')
-            plt.annotate("({:.2f},{:.2f})".format(fpr[idx], tpr[idx]), xy=[fpr[idx], tpr[idx]], xytext=(20, -10),
-                         textcoords='offset points')
-            plt.annotate("Thresholds:{:.2f}".format(thresholds[idx]), xy=[fpr[idx], tpr[idx]], xytext=(20, -20),
-                         textcoords='offset points')
-            plt.savefig(args.save_dir + 'AUC.png')
+            enhanced_image_1, enhanced_image, A = model(img_lowlight)
+
+            Loss_TV = 200 * L_TV(A)
+
+            loss_spa =  torch.mean(L_spa(enhanced_image, img_lowlight))
+
+            # loss_col = 5 * torch.mean(L_color(enhanced_image))
+
+            loss_exp = 10*torch.mean(L_exp(enhanced_image))
+
+            # best_loss
+            loss = Loss_TV + loss_spa + loss_exp
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            # if ((iteration + 1) % 20) == 0:
+            #     print('loss:{}, | TV:{} | spa:{} | exp:{}'.format(loss.item(), Loss_TV.item(), loss_spa.item(),
+            #                                                       loss_exp.item()))
         torch.save(model.state_dict(), args.save_dir + 'e_{}.pth'.format(epoch))
-        print("[epoch {}] AUC:{}".format(epoch, auc))
-        tags = ["loss/train", "loss/val", "metric/Acc", "metric/Precision", "metric/Recall", "metric/AUC",
-                "metric/thresholds",
-                "learning_rate"]
-        tb_writer.add_scalar(tags[0], train_loss, epoch)
-        tb_writer.add_scalar(tags[1], val_loss, epoch)
-        tb_writer.add_scalar(tags[2], acc, epoch)
-        tb_writer.add_scalar(tags[3], precision, epoch)
-        tb_writer.add_scalar(tags[4], recall, epoch)
-        tb_writer.add_scalar(tags[5], auc, epoch)
-        tb_writer.add_scalar(tags[6], thresholds[idx], epoch)
-        tb_writer.add_scalar(tags[7], optimizer.param_groups[0]["lr"], epoch)
-        result = pd.DataFrame(
-            {"loss/train": train_loss, "loss/val": val_loss, "metric/Acc": acc, "metric/Precision": precision,
-             "metric/Recall": recall,
-             "metric/AUC": auc,
-             "thresholds": thresholds[idx],
-             }, index=[1])
-        results = results.append(result, ignore_index=True)
-        results.to_csv(args.save_dir + 'results.csv')
 
 
 if __name__ == '__main__':

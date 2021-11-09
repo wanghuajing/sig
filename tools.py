@@ -16,8 +16,8 @@ def add_name():
 
 
 def dcm2png():
-    path = '/home/zhao/mydata/datasets/GE/origin/'
-    df = pd.read_csv(path + 'GE_all.csv')
+    path = '/media/zhao/HD1/data/henan/'
+    df = pd.read_csv(path + 'GE/GE_all.csv')
     error_item = pd.DataFrame(columns=['image_path'])
     for i in tqdm(range(len(df))):
         imagepath = path + df.loc[i, 'image_path']
@@ -34,12 +34,12 @@ def dcm2png():
         image = (image / 4095 * 65535).astype(np.uint16)
 
         cv2.imwrite(imagepath[0:-3] + 'png', image)
-        print(imagepath)
+        # print(imagepath)
 
 
 def crop_img():
-    path = '/home/zhao/mydata/datasets/GE/origin/'
-    df = pd.read_csv(path + 'GE_all_png.csv')
+    path = '/media/zhao/HD1/data/henan/'
+    df = pd.read_csv(path + 'GE/GE_all_png.csv')
     for i in tqdm(range(len(df))):
         imagepath = path + df.loc[i, 'image_path']
         image = cv2.imread(imagepath, -1)
@@ -80,7 +80,7 @@ def crop_img():
         mask = mask / 255
         # image = image * mask
         image = image[y0:y1, x0:x1]
-        imagepath = imagepath.replace('origin', 'crop_16')
+        imagepath = imagepath.replace('GE', 'GE_16')
         os.makedirs('/'.join(imagepath.split('/')[0:-1]), exist_ok=True)
         cv2.imwrite(imagepath, image)
         # cv2.imwrite('/home/zhao/mydata/projects/MSVCL_MICCAI2021/datasets/3/' + imagepath.split('/')[-1], image)
@@ -157,8 +157,8 @@ def trans8():
 
 
 if __name__ == '__main__':
-    path = '/home/zhao/mydata/projects/sig/1.png'
-    path2 = '/home/zhao/mydata/projects/sig/2.png'
+    path = '/media/zhao/HD1/work_zhao/sig/save_img/GE/0.png'
+    path1 = '/media/zhao/HD1/work_zhao/sig/save_img/GE/0_new.png'
     img = cv2.imread(path, -1)
-    img1 = cv2.imread(path2, -1)
+    img1 = cv2.imread(path1, -1)
     a=1

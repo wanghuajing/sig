@@ -17,7 +17,7 @@ def get_transform(data):
                           # transforms.RandomRotation(10)
                           ]
     else:
-        transform_list = [transforms.RandomCrop([1024, 512])]
+        transform_list = [transforms.Resize(size)]
 
     transform_list += [transforms.ToTensor()]
     # transform_list += [transforms.Normalize((0.5,), (0.5,))]
@@ -56,8 +56,8 @@ class GE_dataset(Dataset):
         imageLabel = torch.FloatTensor(imageLabel)
         image = Image.open(imagePath).convert("I")
         image = self.transform(image)
-        image = image / 65535
-        image = transforms.Normalize((0.5,), (0.5,))(image)
+        image = image / 65535.0
+        # image = transforms.Normalize((0.5,), (0.5,))(image)
         return image, imageLabel
 
     # --------------------------------------------------------------------------------

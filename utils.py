@@ -148,7 +148,7 @@ def evaluate(model, loss, data_loader, device):
     sum_loss = torch.zeros(1).to(device)
     data_loader = tqdm(data_loader)
     cmt = torch.zeros(2, 2, dtype=torch.int64)
-    y = np.array([], dtype=np.int)
+    y = np.array([], dtype=np.int16)
     scores = np.array([])
     for step, data in enumerate(data_loader):
         images, labels = data
@@ -164,9 +164,9 @@ def evaluate(model, loss, data_loader, device):
     J = tpr - fpr
     idx = np.argmax(J)
     best_threshold = thresholds[idx]
-    matrix = (scores > best_threshold).astype(np.int)
+    matrix = (scores > best_threshold).astype(np.int16)
     for i in range(len(matrix)):
-        cmt[matrix[i], y.astype(np.int)[i]] += 1
+        cmt[matrix[i], y.astype(np.int16)[i]] += 1
     acc = (cmt[0][0] + cmt[1][1]) / cmt.sum()
     precision = cmt[1][1] / (cmt[1][0] + cmt[1][1])
     recall = cmt[1][1] / (cmt[1][1] + cmt[0][1])
